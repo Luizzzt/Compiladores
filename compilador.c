@@ -1,5 +1,5 @@
 /*
- * Compilador Fase1: Análise Léxica e Sintática da linguagem Portugol
+ * Compilador Fase 1: Análise Léxica e Sintática da linguagem Portugol
  *
  * Compilar:
  *   gcc -Wall -Wno-unused-result -g -Og compilador.c -o compilador
@@ -120,6 +120,83 @@ void liberar_buffer(void) {
 
 /* ===================== ANALISADOR LÉXICO ===================== */
 
+// identificador -> letra (letra | _ | digito)*   (no máximo 15 caracteres)
+// Autômato:  q0 --letra--> q1 ;  q1 --letra, _ ou digito--> q1
+void reconhece_identificador(TInfoAtomo *info_atomo) {
+    char *ini_lexema = buffer;
+    int tamanho;
+    info_atomo->atomo = ERRO;
+
+    if (isalpha((unsigned char)*buffer)) {
+        buffer++;
+        goto q1;
+    }
+    return;
+
+q1:
+    if (isalpha((unsigned char)*buffer) || isdigit((unsigned char)*buffer) || *buffer == '_') {
+        buffer++;
+        goto q1;
+    }
+
+    // estado final: confere o tamanho e recorta o lexema
+    tamanho = buffer - ini_lexema;
+    if (tamanho > 15) {
+        sprintf(msg_erro_lexico, "identificador com mais de 15 caracteres");
+        return;
+    }
+    strncpy(info_atomo->atributo.id, ini_lexema, tamanho);
+    info_atomo->atributo.id[tamanho] = '\0';
+    info_atomo->atomo = IDENTIFICADOR;
+}
+
+// Reconhece os símbolos da linguagem. Retorna 1 se reconheceu, 0 caso contrário
+int reconhece_simbolo(TInfoAtomo *info_atomo) {
+    switch (*buffer) {
+        case '(': info_atomo->atomo = ABRE_PAR;      break;
+        case ')': info_atomo->atomo = FECHA_PAR;     break;
+        case ';': info_atomo->atomo = PONTO_VIRGULA; break;
+        case ',': info_atomo->atomo = VIRGULA;       break;
+        case '.': info_atomo->atomo = PONTO;         break;
+        case '+': info_atomo->atomo = MAIS;          break;
+        case '-': info_atomo->atomo = MENOS;         break;
+        case '*': info_atomo->atomo = VEZES;         break;
+        case '=': info_atomo->atomo = IGUAL;         break;
+        case ':':
+            if (*(buffer + 1) == '=') {       // :=
+                info_atomo->atomo = ATRIBUICAO;
+                buffer++;
+            }
+            else
+                info_atomo->atomo = DOIS_PONTOS;
+            break;
+        case '<':
+            if (*(buffer + 1) == '=') {       // <=
+                info_atomo->atomo = MENOR_IGUAL;
+                buffer++;
+            }
+            else if (*(buffer + 1) == '>') {  // <>
+                info_atomo->atomo = DIFERENTE;
+                buffer++;
+            }
+            else
+                info_atomo->atomo = MENOR;
+            break;
+        case '>':
+            if (*(buffer + 1) == '=') {       // >=
+                info_atomo->atomo = MAIOR_IGUAL;
+                buffer++;
+            }
+            else
+                info_atomo->atomo = MAIOR;
+            break;
+        default:
+            return 0;
+    }
+    buffer++;   // consome o último caractere do símbolo
+    return 1;
+}
+
 // Retorna o próximo átomo do código fonte
 TInfoAtomo obter_atomo(void) {
     TInfoAtomo info_atomo;
@@ -136,6 +213,12 @@ TInfoAtomo obter_atomo(void) {
 
     if (*buffer == '\0') {
         info_atomo.atomo = EOS;
+    }
+    else if (isalpha((unsigned char)*buffer)) {
+        reconhece_identificador(&info_atomo);
+    }
+    else if (reconhece_simbolo(&info_atomo)) {
+        // símbolo reconhecido, nada mais a fazer
     }
     else {
         sprintf(msg_erro_lexico, "caractere invalido [%c]", *buffer);
