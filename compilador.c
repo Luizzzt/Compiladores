@@ -120,6 +120,23 @@ void liberar_buffer(void) {
 
 /* ===================== ANALISADOR LÉXICO ===================== */
 
+// Verifica se o lexema é palavra reservada (sem diferenciar maiúsculas e minúsculas).
+// Retorna o átomo da palavra reservada ou IDENTIFICADOR.
+TAtomo busca_palavra_reservada(const char *lexema) {
+    char minusculo[16];
+    int i;
+    for (i = 0; lexema[i] != '\0'; i++)
+        minusculo[i] = tolower((unsigned char)lexema[i]);
+    minusculo[i] = '\0';
+
+    // as palavras reservadas estão em sequência no enum, de ALGORITMO até VERDADEIRO
+    for (int atomo = ALGORITMO; atomo <= VERDADEIRO; atomo++) {
+        if (strcmp(minusculo, nome_atomo[atomo]) == 0)
+            return (TAtomo)atomo;
+    }
+    return IDENTIFICADOR;
+}
+
 // identificador -> letra (letra | _ | digito)*   (no máximo 15 caracteres)
 // Autômato:  q0 --letra--> q1 ;  q1 --letra, _ ou digito--> q1
 void reconhece_identificador(TInfoAtomo *info_atomo) {
@@ -147,7 +164,7 @@ q1:
     }
     strncpy(info_atomo->atributo.id, ini_lexema, tamanho);
     info_atomo->atributo.id[tamanho] = '\0';
-    info_atomo->atomo = IDENTIFICADOR;
+    info_atomo->atomo = busca_palavra_reservada(info_atomo->atributo.id);
 }
 
 // Reconhece os símbolos da linguagem. Retorna 1 se reconheceu, 0 caso contrário
