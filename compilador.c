@@ -1,5 +1,5 @@
 /*
- * Compilador Fase 1: Análise Léxica e Sintática da linguagem Portugol
+ * Compilador Fase1: Análise Léxica e Sintática da linguagem Portugol
  *
  * Compilar:
  *   gcc -Wall -Wno-unused-result -g -Og compilador.c -o compilador
@@ -8,6 +8,8 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
 
 /* ===================== ÁTOMOS DA LINGUAGEM ===================== */
 typedef enum {
@@ -78,6 +80,8 @@ typedef struct {
 /* ===================== VARIÁVEIS GLOBAIS DO LÉXICO ===================== */
 char *buffer;          // posição atual de leitura no código fonte
 char *inicio_buffer;   // início do buffer (usado para liberar a memória)
+int conta_linha = 1;   // linha atual do código fonte
+char msg_erro_lexico[100]; // descrição do último erro léxico encontrado
 
 /* ===================== LEITURA DO ARQUIVO ===================== */
 
@@ -114,6 +118,45 @@ void liberar_buffer(void) {
     buffer = NULL;
 }
 
+/* ===================== ANALISADOR LÉXICO ===================== */
+
+// Retorna o próximo átomo do código fonte
+TInfoAtomo obter_atomo(void) {
+    TInfoAtomo info_atomo;
+    info_atomo.atomo = ERRO;
+
+    // ignora delimitadores e conta as linhas
+    while (*buffer == ' ' || *buffer == '\n' || *buffer == '\t' || *buffer == '\r') {
+        if (*buffer == '\n')
+            conta_linha++;
+        buffer++;
+    }
+
+    info_atomo.linha = conta_linha;
+
+    if (*buffer == '\0') {
+        info_atomo.atomo = EOS;
+    }
+    else {
+        sprintf(msg_erro_lexico, "caractere invalido [%c]", *buffer);
+        buffer++;
+    }
+
+    return info_atomo;
+}
+
+// Imprime o átomo no formato pedido: "# linha:atomo"
+void imprimir_atomo(TInfoAtomo info_atomo) {
+    printf("#%3d:%s", info_atomo.linha, nome_atomo[info_atomo.atomo]);
+    if (info_atomo.atomo == IDENTIFICADOR)
+        printf(": %s", info_atomo.atributo.id);
+    else if (info_atomo.atomo == CONSTINT)
+        printf(": %d", info_atomo.atributo.numero);
+    else if (info_atomo.atomo == CONSTCHAR)
+        printf(": %c", info_atomo.atributo.ch);
+    printf("\n");
+}
+
 /* ===================== PRINCIPAL ===================== */
 int main(int argc, char *argv[]) {
     if (argc != 2) {
@@ -122,7 +165,16 @@ int main(int argc, char *argv[]) {
     }
 
     ler_arquivo(argv[1]);
-    printf("%s", buffer);   // teste: mostra o conteúdo lido
+
+    // teste do léxico: imprime todos os átomos até o fim do arquivo
+    TInfoAtomo info_atomo = obter_atomo();
+    while (info_atomo.atomo != EOS && info_atomo.atomo != ERRO) {
+        imprimir_atomo(info_atomo);
+        info_atomo = obter_atomo();
+    }
+    if (info_atomo.atomo == ERRO)
+        printf("#%3d:erro lexico, %s\n", info_atomo.linha, msg_erro_lexico);
+
     liberar_buffer();
     return 0;
 }
