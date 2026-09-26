@@ -115,6 +115,20 @@ void ler_arquivo(const char *nome_arquivo) {
     buffer = inicio_buffer;
 }
 
+// Conta quantas linhas o arquivo fonte possui
+int contar_linhas(void) {
+    int linhas = 0;
+    char *p;
+    for (p = inicio_buffer; *p != '\0'; p++) {
+        if (*p == '\n')
+            linhas++;
+    }
+    // a última linha pode não terminar com '\n'
+    if (p != inicio_buffer && *(p - 1) != '\n')
+        linhas++;
+    return linhas;
+}
+
 // Libera a memória do buffer
 void liberar_buffer(void) {
     free(inicio_buffer);
@@ -763,7 +777,7 @@ int main(int argc, char *argv[]) {
     programa();        // símbolo inicial da gramática
     consome(EOS);
 
-    printf("programa sintaticamente correto\n");
+    printf("%d linhas analisadas, programa sintaticamente correto\n", contar_linhas());
     liberar_buffer();
     return 0;
 }
