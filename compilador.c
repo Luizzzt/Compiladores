@@ -437,6 +437,12 @@ void lista_variaveis(void);
 void tipo(void);
 void comando_composto(void);
 void comando(void);
+void comando_atribuicao_ou_chamada(void);
+void lista_expressao(void);
+void expressao(void);
+void expressao_simples(void);
+void termo(void);
+void fator(void);
 
 // Libera a memória e termina o programa
 void encerrar(int codigo) {
@@ -540,12 +546,101 @@ void comando_composto(void) {
     consome(FIM);
 }
 
-// <comando> ::= ... (por enquanto somente comando composto)
+// <comando> ::= <comando_atribuicao> | <chamada_procedimento> | <comando_composto>
 void comando(void) {
-    if (lookahead == INICIO)
-        comando_composto();
-    else
-        erro_sintatico("comando");
+    switch (lookahead) {
+        case IDENTIFICADOR: comando_atribuicao_ou_chamada(); break;
+        case INICIO:        comando_composto();              break;
+        default:            erro_sintatico("comando");
+    }
+}
+
+// <comando_atribuicao>   ::= identificador ':=' <expressao>
+// <chamada_procedimento> ::= identificador [ '(' <lista_expressao> ')' ]
+// Os dois começam com identificador, então o próximo átomo decide qual é.
+void comando_atribuicao_ou_chamada(void) {
+    consome(IDENTIFICADOR);
+    if (lookahead == ATRIBUICAO) {
+        consome(ATRIBUICAO);
+        expressao();
+    }
+    else if (lookahead == ABRE_PAR) {
+        consome(ABRE_PAR);
+        lista_expressao();
+        consome(FECHA_PAR);
+    }
+}
+
+// <lista_expressao> ::= <expressao> { ',' <expressao> }
+void lista_expressao(void) {
+    expressao();
+    while (lookahead == VIRGULA) {
+        consome(VIRGULA);
+        expressao();
+    }
+}
+
+// <expressao> ::= <expressao_simples> [ <operador_relacional> <expressao_simples> ]
+// <operador_relacional> ::= '<>' | '<' | '<=' | '>=' | '>' | '='
+void expressao(void) {
+    expressao_simples();
+    if (lookahead == DIFERENTE || lookahead == MENOR || lookahead == MENOR_IGUAL ||
+        lookahead == MAIOR_IGUAL || lookahead == MAIOR || lookahead == IGUAL) {
+        consome(lookahead);
+        expressao_simples();
+    }
+}
+
+// <expressao_simples> ::= <termo> { <operador_adicao> <termo> }
+// <operador_adicao> ::= '+' | '-' | mod | ou
+void expressao_simples(void) {
+    termo();
+    while (lookahead == MAIS || lookahead == MENOS || lookahead == MOD || lookahead == OU) {
+        consome(lookahead);
+        termo();
+    }
+}
+
+// <termo> ::= <fator> { <operador_multiplicacao> <fator> }
+// <operador_multiplicacao> ::= '*' | div | e
+void termo(void) {
+    fator();
+    while (lookahead == VEZES || lookahead == DIV || lookahead == E) {
+        consome(lookahead);
+        fator();
+    }
+}
+
+// <fator> ::= identificador [ '(' <lista_expressao> ')' ] | constint | constchar |
+//             '(' <expressao> ')' | ( '+' | '-' | nao ) <fator> | verdadeiro | falso
+void fator(void) {
+    switch (lookahead) {
+        case IDENTIFICADOR:
+            consome(IDENTIFICADOR);
+            if (lookahead == ABRE_PAR) {
+                consome(ABRE_PAR);
+                lista_expressao();
+                consome(FECHA_PAR);
+            }
+            break;
+        case CONSTINT:   consome(CONSTINT);   break;
+        case CONSTCHAR:  consome(CONSTCHAR);  break;
+        case VERDADEIRO: consome(VERDADEIRO); break;
+        case FALSO:      consome(FALSO);      break;
+        case ABRE_PAR:
+            consome(ABRE_PAR);
+            expressao();
+            consome(FECHA_PAR);
+            break;
+        case MAIS:
+        case MENOS:
+        case NAO:
+            consome(lookahead);
+            fator();
+            break;
+        default:
+            erro_sintatico("fator");
+    }
 }
 
 /* ===================== PRINCIPAL ===================== */
