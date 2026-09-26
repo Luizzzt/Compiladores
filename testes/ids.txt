@@ -1,5 +1,0 @@
-num_1 NUM_2 tEste x
-abc123_ ;
-identificador_grandegcc -Wall -Wno-unused-result -g -Og compilador.c -o compilador
-cat testes/ids.txt
-./compilador testes/ids.txt

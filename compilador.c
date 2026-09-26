@@ -1,5 +1,5 @@
 /*
- * Compilador Fase 1: Análise Léxica e Sintática da linguagem Portugol
+ * Compilador Fase1: Análise Léxica e Sintática da linguagem Portugol
  *
  * Compilar:
  *   gcc -Wall -Wno-unused-result -g -Og compilador.c -o compilador
@@ -167,6 +167,73 @@ q1:
     info_atomo->atomo = busca_palavra_reservada(info_atomo->atributo.id);
 }
 
+// constint -> digito+ ((E (+|vazio) digito+) | vazio)
+// Exemplos: 1, 000, 124, 12E2 (=1200), 12E+2 (=1200)
+// Autômato:  q0 --digito--> q1 ;  q1 --digito--> q1 ;  q1 --E--> q2 ;
+//            q2 --+--> q3 ;  q2 --digito--> q4 ;  q3 --digito--> q4 ;  q4 --digito--> q4
+// Estados finais: q1 e q4
+void reconhece_constint(TInfoAtomo *info_atomo) {
+    int valor = 0;
+    int expoente = 0;
+    int i;
+    info_atomo->atomo = ERRO;
+
+    if (isdigit((unsigned char)*buffer)) {
+        valor = *buffer - '0';
+        buffer++;
+        goto q1;
+    }
+    return;
+
+q1:
+    if (isdigit((unsigned char)*buffer)) {
+        valor = valor * 10 + (*buffer - '0');
+        buffer++;
+        goto q1;
+    }
+    if (*buffer == 'E') {
+        buffer++;
+        goto q2;
+    }
+    goto final;   // q1 é estado final
+
+q2:
+    if (*buffer == '+') {
+        buffer++;
+        goto q3;
+    }
+    if (isdigit((unsigned char)*buffer)) {
+        expoente = *buffer - '0';
+        buffer++;
+        goto q4;
+    }
+    sprintf(msg_erro_lexico, "constante inteira mal formada");
+    return;
+
+q3:
+    if (isdigit((unsigned char)*buffer)) {
+        expoente = *buffer - '0';
+        buffer++;
+        goto q4;
+    }
+    sprintf(msg_erro_lexico, "constante inteira mal formada");
+    return;
+
+q4:
+    if (isdigit((unsigned char)*buffer)) {
+        expoente = expoente * 10 + (*buffer - '0');
+        buffer++;
+        goto q4;
+    }
+    // q4 é estado final: aplica o expoente (12E2 = 12 * 10 * 10)
+    for (i = 0; i < expoente; i++)
+        valor = valor * 10;
+
+final:
+    info_atomo->atomo = CONSTINT;
+    info_atomo->atributo.numero = valor;
+}
+
 // Reconhece os símbolos da linguagem. Retorna 1 se reconheceu, 0 caso contrário
 int reconhece_simbolo(TInfoAtomo *info_atomo) {
     switch (*buffer) {
@@ -234,6 +301,9 @@ TInfoAtomo obter_atomo(void) {
     else if (isalpha((unsigned char)*buffer)) {
         reconhece_identificador(&info_atomo);
     }
+    else if (isdigit((unsigned char)*buffer)) {
+        reconhece_constint(&info_atomo);
+    }
     else if (reconhece_simbolo(&info_atomo)) {
         // símbolo reconhecido, nada mais a fazer
     }
@@ -245,7 +315,7 @@ TInfoAtomo obter_atomo(void) {
     return info_atomo;
 }
 
-// Imprime o átomo no formato pedido: "# linha:atomo"
+// Imprime o Atomo no formato pedido: "# linha:atomo"
 void imprimir_atomo(TInfoAtomo info_atomo) {
     printf("#%3d:%s", info_atomo.linha, nome_atomo[info_atomo.atomo]);
     if (info_atomo.atomo == IDENTIFICADOR)
@@ -266,7 +336,7 @@ int main(int argc, char *argv[]) {
 
     ler_arquivo(argv[1]);
 
-    // teste do léxico: imprime todos os átomos até o fim do arquivo
+    // teste do léxico: imprimetodos os átomos até o fim do arquivo
     TInfoAtomo info_atomo = obter_atomo();
     while (info_atomo.atomo != EOS && info_atomo.atomo != ERRO) {
         imprimir_atomo(info_atomo);

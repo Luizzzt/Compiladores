@@ -1,2 +1,0 @@
-alGoRiTmo ALGORITMO inicio Fim SEnao senao1 e E div mod ou nao
-funcao procedimento var verdadeiro FALSO
