@@ -83,6 +83,10 @@ char *inicio_buffer;   // início do buffer (usado para liberar a memória)
 int conta_linha = 1;   // linha atual do código fonte
 char msg_erro_lexico[100]; // descrição do último erro léxico encontrado
 
+/* ===================== VARIÁVEIS GLOBAIS DO SINTÁTICO ===================== */
+TAtomo lookahead;       // átomo atual
+TInfoAtomo info_atomo;  // informações do átomo atual
+
 /* ===================== LEITURA DO ARQUIVO ===================== */
 
 // Lê todo o arquivo fonte para a memória e aponta 'buffer' para o início
@@ -423,6 +427,127 @@ void imprimir_atomo(TInfoAtomo info_atomo) {
     printf("\n");
 }
 
+/* ===================== ANALISADOR SINTÁTICO ===================== */
+
+// protótipos das funções da gramática
+void programa(void);
+void bloco(void);
+void declaracao_variaveis(void);
+void lista_variaveis(void);
+void tipo(void);
+void comando_composto(void);
+void comando(void);
+
+// Libera a memória e termina o programa
+void encerrar(int codigo) {
+    liberar_buffer();
+    exit(codigo);
+}
+
+// Mostra o erro sintático e termina a execução
+void erro_sintatico(const char *esperado) {
+    printf("#%3d:erro sintatico, esperado [%s] encontrado [%s]\n",
+           info_atomo.linha, esperado, simbolo_atomo[lookahead]);
+    encerrar(1);
+}
+
+// Pede o próximo átomo ao léxico.
+// Comentários são impressos e descartados; erro léxico termina a execução.
+void proximo_atomo(void) {
+    info_atomo = obter_atomo();
+    while (info_atomo.atomo == COMENTARIO) {
+        imprimir_atomo(info_atomo);
+        info_atomo = obter_atomo();
+    }
+    if (info_atomo.atomo == ERRO) {
+        printf("#%3d:erro lexico, %s\n", info_atomo.linha, msg_erro_lexico);
+        encerrar(1);
+    }
+    lookahead = info_atomo.atomo;
+}
+
+// Confere se o átomo atual é o esperado, imprime e avança
+void consome(TAtomo atomo) {
+    if (lookahead == atomo) {
+        if (atomo != EOS)   // o fim de arquivo não é impresso
+            imprimir_atomo(info_atomo);
+        proximo_atomo();
+    }
+    else {
+        erro_sintatico(simbolo_atomo[atomo]);
+    }
+}
+
+// <programa> ::= algoritmo identificador ';' <bloco> '.'
+void programa(void) {
+    consome(ALGORITMO);
+    consome(IDENTIFICADOR);
+    consome(PONTO_VIRGULA);
+    bloco();
+    consome(PONTO);
+}
+
+// <bloco> ::= <declaracao_variaveis> <declaracao_de_rotinas> <comando_composto>
+void bloco(void) {
+    declaracao_variaveis();
+    comando_composto();
+}
+
+// <declaracao_variaveis> ::= [ var <lista_variaveis> ';' { <lista_variaveis> ';' } ]
+void declaracao_variaveis(void) {
+    if (lookahead == VAR) {
+        consome(VAR);
+        lista_variaveis();
+        consome(PONTO_VIRGULA);
+        while (lookahead == IDENTIFICADOR) {
+            lista_variaveis();
+            consome(PONTO_VIRGULA);
+        }
+    }
+}
+
+// <lista_variaveis> ::= identificador { ',' identificador } ':' <tipo>
+void lista_variaveis(void) {
+    consome(IDENTIFICADOR);
+    while (lookahead == VIRGULA) {
+        consome(VIRGULA);
+        consome(IDENTIFICADOR);
+    }
+    consome(DOIS_PONTOS);
+    tipo();
+}
+
+// <tipo> ::= caractere | inteiro | logico
+void tipo(void) {
+    if (lookahead == CARACTERE)
+        consome(CARACTERE);
+    else if (lookahead == INTEIRO)
+        consome(INTEIRO);
+    else if (lookahead == LOGICO)
+        consome(LOGICO);
+    else
+        erro_sintatico("tipo");
+}
+
+// <comando_composto> ::= inicio <comando> { ';' <comando> } fim
+void comando_composto(void) {
+    consome(INICIO);
+    comando();
+    while (lookahead == PONTO_VIRGULA) {
+        consome(PONTO_VIRGULA);
+        comando();
+    }
+    consome(FIM);
+}
+
+// <comando> ::= ... (por enquanto somente comando composto)
+void comando(void) {
+    if (lookahead == INICIO)
+        comando_composto();
+    else
+        erro_sintatico("comando");
+}
+
 /* ===================== PRINCIPAL ===================== */
 int main(int argc, char *argv[]) {
     if (argc != 2) {
@@ -432,15 +557,11 @@ int main(int argc, char *argv[]) {
 
     ler_arquivo(argv[1]);
 
-    // teste do léxico: imprime todos os átomos até o fim do arquivo
-    TInfoAtomo info_atomo = obter_atomo();
-    while (info_atomo.atomo != EOS && info_atomo.atomo != ERRO) {
-        imprimir_atomo(info_atomo);
-        info_atomo = obter_atomo();
-    }
-    if (info_atomo.atomo == ERRO)
-        printf("#%3d:erro lexico, %s\n", info_atomo.linha, msg_erro_lexico);
+    proximo_atomo();   // inicializa o lookahead
+    programa();        // símbolo inicial da gramática
+    consome(EOS);
 
+    printf("programa sintaticamente correto\n");
     liberar_buffer();
     return 0;
 }
