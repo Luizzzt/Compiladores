@@ -267,6 +267,63 @@ q3:
     info_atomo->atomo = CONSTCHAR;
 }
 
+// Comentário de várias linhas: começa com {- e termina com -}
+// A contagem de linhas continua dentro do comentário.
+// Autômato:  q0 --{--> q1 ;  q1 --  -  --> q2 ;
+//            q2 --  -  --> q3 ;  q2 --outro--> q2 ;
+//            q3 --  }  --> q4 (final) ;  q3 --  -  --> q3 ;  q3 --outro--> q2
+void reconhece_comentario(TInfoAtomo *info_atomo) {
+    info_atomo->atomo = ERRO;
+
+    if (*buffer == '{') {
+        buffer++;
+        goto q1;
+    }
+    return;
+
+q1:
+    if (*buffer == '-') {
+        buffer++;
+        goto q2;
+    }
+    return;
+
+q2:
+    if (*buffer == '\0') {
+        sprintf(msg_erro_lexico, "comentario nao foi fechado");
+        return;
+    }
+    if (*buffer == '-') {
+        buffer++;
+        goto q3;
+    }
+    if (*buffer == '\n')
+        conta_linha++;
+    buffer++;
+    goto q2;
+
+q3:
+    if (*buffer == '\0') {
+        sprintf(msg_erro_lexico, "comentario nao foi fechado");
+        return;
+    }
+    if (*buffer == '}') {
+        buffer++;
+        goto q4;
+    }
+    if (*buffer == '-') {
+        buffer++;
+        goto q3;
+    }
+    if (*buffer == '\n')
+        conta_linha++;
+    buffer++;
+    goto q2;
+
+q4:
+    info_atomo->atomo = COMENTARIO;
+}
+
 // Reconhece os símbolos da linguagem. Retorna 1 se reconheceu, 0 caso contrário
 int reconhece_simbolo(TInfoAtomo *info_atomo) {
     switch (*buffer) {
@@ -339,6 +396,9 @@ TInfoAtomo obter_atomo(void) {
     }
     else if (*buffer == '\'') {
         reconhece_constchar(&info_atomo);
+    }
+    else if (*buffer == '{' && *(buffer + 1) == '-') {
+        reconhece_comentario(&info_atomo);
     }
     else if (reconhece_simbolo(&info_atomo)) {
         // símbolo reconhecido, nada mais a fazer
