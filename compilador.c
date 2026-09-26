@@ -434,10 +434,19 @@ void programa(void);
 void bloco(void);
 void declaracao_variaveis(void);
 void lista_variaveis(void);
+void declaracao_de_rotinas(void);
+void declaracao_de_funcao(void);
+void declaracao_de_procedimento(void);
+void parametros_formais(void);
+void parametro_formal(void);
 void tipo(void);
 void comando_composto(void);
 void comando(void);
 void comando_atribuicao_ou_chamada(void);
+void comando_entrada(void);
+void comando_saida(void);
+void comando_condicional(void);
+void comando_repeticao(void);
 void lista_expressao(void);
 void expressao(void);
 void expressao_simples(void);
@@ -496,6 +505,7 @@ void programa(void) {
 // <bloco> ::= <declaracao_variaveis> <declaracao_de_rotinas> <comando_composto>
 void bloco(void) {
     declaracao_variaveis();
+    declaracao_de_rotinas();
     comando_composto();
 }
 
@@ -523,6 +533,57 @@ void lista_variaveis(void) {
     tipo();
 }
 
+// <declaracao_de_rotinas> ::= { <declaracao_de_funcao> | <declaracao_de_procedimento> }
+void declaracao_de_rotinas(void) {
+    while (lookahead == FUNCAO || lookahead == PROCEDIMENTO) {
+        if (lookahead == FUNCAO)
+            declaracao_de_funcao();
+        else
+            declaracao_de_procedimento();
+    }
+}
+
+// <declaracao_de_funcao> ::= funcao <tipo> identificador <parametros_formais>
+//                            <declaracao_variaveis> <comando_composto>
+void declaracao_de_funcao(void) {
+    consome(FUNCAO);
+    tipo();
+    consome(IDENTIFICADOR);
+    parametros_formais();
+    declaracao_variaveis();
+    comando_composto();
+}
+
+// <declaracao_de_procedimento> ::= procedimento identificador <parametros_formais>
+//                                  <declaracao_variaveis> <comando_composto>
+void declaracao_de_procedimento(void) {
+    consome(PROCEDIMENTO);
+    consome(IDENTIFICADOR);
+    parametros_formais();
+    declaracao_variaveis();
+    comando_composto();
+}
+
+// <parametros_formais> ::= '(' <parametro_formal> { ';' <parametro_formal> } ')' | '(' ')'
+void parametros_formais(void) {
+    consome(ABRE_PAR);
+    if (lookahead != FECHA_PAR) {
+        parametro_formal();
+        while (lookahead == PONTO_VIRGULA) {
+            consome(PONTO_VIRGULA);
+            parametro_formal();
+        }
+    }
+    consome(FECHA_PAR);
+}
+
+// <parametro_formal> ::= [ var ] <lista_variaveis>
+void parametro_formal(void) {
+    if (lookahead == VAR)
+        consome(VAR);
+    lista_variaveis();
+}
+
 // <tipo> ::= caractere | inteiro | logico
 void tipo(void) {
     if (lookahead == CARACTERE)
@@ -546,10 +607,16 @@ void comando_composto(void) {
     consome(FIM);
 }
 
-// <comando> ::= <comando_atribuicao> | <chamada_procedimento> | <comando_composto>
+// <comando> ::= <comando_atribuicao> | <comando_entrada> | <comando_saida> |
+//               <comando_condicional> | <comando_repeticao> |
+//               <chamada_procedimento> | <comando_composto>
 void comando(void) {
     switch (lookahead) {
         case IDENTIFICADOR: comando_atribuicao_ou_chamada(); break;
+        case LEIA:          comando_entrada();               break;
+        case ESCREVA:       comando_saida();                 break;
+        case SE:            comando_condicional();           break;
+        case ENQUANTO:      comando_repeticao();             break;
         case INICIO:        comando_composto();              break;
         default:            erro_sintatico("comando");
     }
@@ -569,6 +636,46 @@ void comando_atribuicao_ou_chamada(void) {
         lista_expressao();
         consome(FECHA_PAR);
     }
+}
+
+// <comando_entrada> ::= leia '(' identificador { ',' identificador } ')'
+void comando_entrada(void) {
+    consome(LEIA);
+    consome(ABRE_PAR);
+    consome(IDENTIFICADOR);
+    while (lookahead == VIRGULA) {
+        consome(VIRGULA);
+        consome(IDENTIFICADOR);
+    }
+    consome(FECHA_PAR);
+}
+
+// <comando_saida> ::= escreva '(' <lista_expressao> ')'
+void comando_saida(void) {
+    consome(ESCREVA);
+    consome(ABRE_PAR);
+    lista_expressao();
+    consome(FECHA_PAR);
+}
+
+// <comando_condicional> ::= se <expressao> entao <comando> [ senao <comando> ]
+void comando_condicional(void) {
+    consome(SE);
+    expressao();
+    consome(ENTAO);
+    comando();
+    if (lookahead == SENAO) {
+        consome(SENAO);
+        comando();
+    }
+}
+
+// <comando_repeticao> ::= enquanto <expressao> faca <comando>
+void comando_repeticao(void) {
+    consome(ENQUANTO);
+    expressao();
+    consome(FACA);
+    comando();
 }
 
 // <lista_expressao> ::= <expressao> { ',' <expressao> }
