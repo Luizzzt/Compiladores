@@ -1,5 +1,5 @@
 /*
- * Compilador Fase1: Análise Léxica e Sintática da linguagem Portugol
+ * Compilador Fase 1: Análise Léxica e Sintática da linguagem Portugol
  *
  * Compilar:
  *   gcc -Wall -Wno-unused-result -g -Og compilador.c -o compilador
@@ -234,6 +234,39 @@ final:
     info_atomo->atributo.numero = valor;
 }
 
+// constchar -> 'caractere ASCII'   Exemplos: 'a', '0'
+// Autômato:  q0 --'--> q1 ;  q1 --caractere ASCII--> q2 ;  q2 --'--> q3 (final)
+void reconhece_constchar(TInfoAtomo *info_atomo) {
+    info_atomo->atomo = ERRO;
+
+    if (*buffer == '\'') {
+        buffer++;
+        goto q1;
+    }
+    return;
+
+q1:
+    // aceita qualquer caractere ASCII (1 a 127), menos o fim do arquivo
+    if (*buffer != '\0' && (unsigned char)*buffer <= 127) {
+        info_atomo->atributo.ch = *buffer;
+        buffer++;
+        goto q2;
+    }
+    sprintf(msg_erro_lexico, "constante caractere mal formada");
+    return;
+
+q2:
+    if (*buffer == '\'') {
+        buffer++;
+        goto q3;
+    }
+    sprintf(msg_erro_lexico, "constante caractere mal formada");
+    return;
+
+q3:
+    info_atomo->atomo = CONSTCHAR;
+}
+
 // Reconhece os símbolos da linguagem. Retorna 1 se reconheceu, 0 caso contrário
 int reconhece_simbolo(TInfoAtomo *info_atomo) {
     switch (*buffer) {
@@ -304,6 +337,9 @@ TInfoAtomo obter_atomo(void) {
     else if (isdigit((unsigned char)*buffer)) {
         reconhece_constint(&info_atomo);
     }
+    else if (*buffer == '\'') {
+        reconhece_constchar(&info_atomo);
+    }
     else if (reconhece_simbolo(&info_atomo)) {
         // símbolo reconhecido, nada mais a fazer
     }
@@ -315,7 +351,7 @@ TInfoAtomo obter_atomo(void) {
     return info_atomo;
 }
 
-// Imprime o Atomo no formato pedido: "# linha:atomo"
+// Imprime o átomo no formato pedido: "# linha:atomo"
 void imprimir_atomo(TInfoAtomo info_atomo) {
     printf("#%3d:%s", info_atomo.linha, nome_atomo[info_atomo.atomo]);
     if (info_atomo.atomo == IDENTIFICADOR)
@@ -336,7 +372,7 @@ int main(int argc, char *argv[]) {
 
     ler_arquivo(argv[1]);
 
-    // teste do léxico: imprimetodos os átomos até o fim do arquivo
+    // teste do léxico: imprime todos os átomos até o fim do arquivo
     TInfoAtomo info_atomo = obter_atomo();
     while (info_atomo.atomo != EOS && info_atomo.atomo != ERRO) {
         imprimir_atomo(info_atomo);
