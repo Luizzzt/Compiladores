@@ -1,8 +1,9 @@
 /*
- * Compilador Fase 1: Análise Léxica e Sintática da linguagem Portugol
+ * Compilador Fase 2: Análise Semântica e Geração de Código MEPA da linguagem Portugol
+ * (a fase 1, análise léxica e sintática, continua neste mesmo arquivo)
  *
  * Compilar:
- *   gcc -Wall -Wno-unused-result -g -Og compilador.c -o compilador
+ *   gcc -Wall -Wno-unused-result -g -Og compilador.c hash_mack.o -o compilador
  * Executar:
  *   ./compilador <arquivo_fonte>
  */
@@ -44,7 +45,7 @@ typedef enum {
     DIFERENTE       // <>
 } TAtomo;
 
-// Nome de cada átomo, usado na saída do compilador (mesma ordem do enum)
+// Nome de cada átomo, usado na busca das palavras reservadas (mesma ordem do enum)
 char *nome_atomo[] = {
     "erro", "fim_arquivo", "comentario", "identificador", "constint", "constchar",
     "algoritmo", "caractere", "div", "e", "enquanto", "entao", "escreva", "faca", "falso",
@@ -429,18 +430,6 @@ TInfoAtomo obter_atomo(void) {
     return info_atomo;
 }
 
-// Imprime o átomo no formato pedido: "# linha:atomo"
-void imprimir_atomo(TInfoAtomo info_atomo) {
-    printf("#%3d:%s", info_atomo.linha, nome_atomo[info_atomo.atomo]);
-    if (info_atomo.atomo == IDENTIFICADOR)
-        printf(": %s", info_atomo.atributo.id);
-    else if (info_atomo.atomo == CONSTINT)
-        printf(": %d", info_atomo.atributo.numero);
-    else if (info_atomo.atomo == CONSTCHAR)
-        printf(": %c", info_atomo.atributo.ch);
-    printf("\n");
-}
-
 /* ===================== ANALISADOR SINTÁTICO ===================== */
 
 // protótipos das funções da gramática
@@ -481,13 +470,11 @@ void erro_sintatico(const char *esperado) {
 }
 
 // Pede o próximo átomo ao léxico.
-// Comentários são impressos e descartados; erro léxico termina a execução.
+// Comentários são descartados; erro léxico termina a execução.
 void proximo_atomo(void) {
     info_atomo = obter_atomo();
-    while (info_atomo.atomo == COMENTARIO) {
-        imprimir_atomo(info_atomo);
+    while (info_atomo.atomo == COMENTARIO)
         info_atomo = obter_atomo();
-    }
     if (info_atomo.atomo == ERRO) {
         printf("#%3d:erro lexico, %s\n", info_atomo.linha, msg_erro_lexico);
         encerrar(1);
@@ -495,11 +482,10 @@ void proximo_atomo(void) {
     lookahead = info_atomo.atomo;
 }
 
-// Confere se o átomo atual é o esperado, imprime e avança
+// Confere se o átomo atual é o esperado e avança
+// (na fase 2 os átomos não são mais impressos)
 void consome(TAtomo atomo) {
     if (lookahead == atomo) {
-        if (atomo != EOS)   // o fim de arquivo não é impresso
-            imprimir_atomo(info_atomo);
         proximo_atomo();
     }
     else {
