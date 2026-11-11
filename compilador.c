@@ -78,6 +78,63 @@ typedef struct {
     } atributo;
 } TInfoAtomo;
 
+/* ===================== TABELA DE SÍMBOLOS ===================== */
+#define PRIME_NUMER 211     // numero primo para reduzir colisoes
+#define MAX_PARAMETROS 20   // quantidade máxima de parâmetros de uma rotina
+
+// Categoria de cada identificador guardado na tabela
+typedef enum {
+    CAT_PROGRAMA,
+    CAT_VARIAVEL,
+    CAT_PARAMETRO,
+    CAT_FUNCAO,
+    CAT_PROCEDIMENTO
+} TCategoria;
+
+char *nome_categoria[] = { "programa", "variavel", "parametro", "funcao", "procedimento" };
+
+typedef struct _TNo {
+    char ID[16];
+    int endereco;           // deslocamento na MEPA (variável, parâmetro ou retorno da função)
+    TCategoria categoria;
+    int nivel;              // 0 = escopo global, 1 = escopo local (dentro de rotina)
+    TAtomo tipo;            // tipo da variável/parâmetro ou tipo de retorno da função
+    int por_referencia;     // 1 se for parâmetro declarado com var
+    struct _TNo *rotina;    // rotina onde o identificador local foi declarado (NULL se global)
+    int rotulo;             // rótulo MEPA onde começa a função ou procedimento
+    int num_parametros;     // quantidade de parâmetros da função ou procedimento
+    int ref_parametros[MAX_PARAMETROS]; // 1 se o i-ésimo parâmetro é por referência
+    struct _TNo *prox;
+} TNo;
+
+typedef struct {
+    TNo *entradas[PRIME_NUMER];
+} TTabelaSimbolos;
+
+// função de dispersão implementada em hash_mack.o
+int hashMack(char *s);
+
+TTabelaSimbolos tabela;     // tabela de símbolos do compilador
+
+// Deixa todas as entradas da tabela vazias
+void inicializar_tabela(void) {
+    for (int i = 0; i < PRIME_NUMER; i++)
+        tabela.entradas[i] = NULL;
+}
+
+// Libera todos os nós das listas encadeadas da tabela
+void liberar_tabela(void) {
+    for (int i = 0; i < PRIME_NUMER; i++) {
+        TNo *no = tabela.entradas[i];
+        while (no != NULL) {
+            TNo *prox = no->prox;
+            free(no);
+            no = prox;
+        }
+        tabela.entradas[i] = NULL;
+    }
+}
+
 /* ===================== VARIÁVEIS GLOBAIS DO LÉXICO ===================== */
 char *buffer;          // posição atual de leitura no código fonte
 char *inicio_buffer;   // início do buffer (usado para liberar a memória)
@@ -459,6 +516,7 @@ void fator(void);
 // Libera a memória e termina o programa
 void encerrar(int codigo) {
     liberar_buffer();
+    liberar_tabela();
     exit(codigo);
 }
 
@@ -758,6 +816,7 @@ int main(int argc, char *argv[]) {
     }
 
     ler_arquivo(argv[1]);
+    inicializar_tabela();
 
     proximo_atomo();   // inicializa o lookahead
     programa();        // símbolo inicial da gramática
@@ -765,5 +824,6 @@ int main(int argc, char *argv[]) {
 
     printf("%d linhas analisadas, programa sintaticamente correto\n", contar_linhas());
     liberar_buffer();
+    liberar_tabela();
     return 0;
 }
