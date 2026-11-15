@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdarg.h>
 
 /* ===================== ÁTOMOS DA LINGUAGEM ===================== */
 typedef enum {
@@ -205,6 +206,10 @@ char msg_erro_lexico[100]; // descrição do último erro léxico encontrado
 /* ===================== VARIÁVEIS GLOBAIS DO SINTÁTICO ===================== */
 TAtomo lookahead;       // átomo atual
 TInfoAtomo info_atomo;  // informações do átomo atual
+
+/* ===================== VARIÁVEIS GLOBAIS DO SEMÂNTICO ===================== */
+char ultimo_id[16];     // lexema do último identificador consumido
+int linha_ultimo_id;    // linha do último identificador consumido
 
 /* ===================== LEITURA DO ARQUIVO ===================== */
 
@@ -588,6 +593,17 @@ void erro_sintatico(const char *esperado) {
     encerrar(1);
 }
 
+// Mostra o erro semantico com a linha onde ocorreu e termina a execução
+void erro_semantico(int linha, const char *formato, ...) {
+    va_list args;
+    printf("#%3d:erro semantico, ", linha);
+    va_start(args, formato);
+    vprintf(formato, args);
+    va_end(args);
+    printf("\n");
+    encerrar(1);
+}
+
 // Pede o próximo átomo ao léxico.
 // Comentários são descartados; erro léxico termina a execução.
 void proximo_atomo(void) {
@@ -612,10 +628,29 @@ void consome(TAtomo atomo) {
     }
 }
 
+// Consome um identificador guardando o lexema e a linha em ultimo_id e linha_ultimo_id
+void consome_identificador(void) {
+    if (lookahead == IDENTIFICADOR) {
+        strcpy(ultimo_id, info_atomo.atributo.id);
+        linha_ultimo_id = info_atomo.linha;
+    }
+    consome(IDENTIFICADOR);
+}
+
+// Consome o identificador que esta sendo declarado e insere na tabela de símbolos.
+// Se ele já existe no escopo atual ocorre erro semântico.
+TNo *declara_identificador(TCategoria categoria) {
+    consome_identificador();
+    TNo *no = inserir_simbolo(ultimo_id, categoria);
+    if (no == NULL)
+        erro_semantico(linha_ultimo_id, "identificador [%s] ja foi declarado neste escopo", ultimo_id);
+    return no;
+}
+
 // <programa> ::= algoritmo identificador ';' <bloco> '.'
 void programa(void) {
     consome(ALGORITMO);
-    consome(IDENTIFICADOR);
+    declara_identificador(CAT_PROGRAMA);
     consome(PONTO_VIRGULA);
     bloco();
     consome(PONTO);
@@ -667,20 +702,26 @@ void declaracao_de_rotinas(void) {
 void declaracao_de_funcao(void) {
     consome(FUNCAO);
     tipo();
-    consome(IDENTIFICADOR);
+    TNo *funcao = declara_identificador(CAT_FUNCAO);   // nome da função é global
+
+    rotina_atual = funcao;     // a partir daqui o escopo é local
     parametros_formais();
     declaracao_variaveis();
     comando_composto();
+    rotina_atual = NULL;       // volta para o escopo global
 }
 
 // <declaracao_de_procedimento> ::= procedimento identificador <parametros_formais>
 //                                  <declaracao_variaveis> <comando_composto>
 void declaracao_de_procedimento(void) {
     consome(PROCEDIMENTO);
-    consome(IDENTIFICADOR);
+    TNo *procedimento = declara_identificador(CAT_PROCEDIMENTO);   // nome é global
+
+    rotina_atual = procedimento;   // a partir daqui o escopo é local
     parametros_formais();
     declaracao_variaveis();
     comando_composto();
+    rotina_atual = NULL;           // volta para o escopo global
 }
 
 // <parametros_formais> ::= '(' <parametro_formal> { ';' <parametro_formal> } ')' | '(' ')'
