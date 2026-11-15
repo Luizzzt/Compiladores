@@ -135,6 +135,67 @@ void liberar_tabela(void) {
     }
 }
 
+TNo *rotina_atual = NULL;   // rotina sendo analisada (NULL = programa principal)
+
+// Copia o identificador em letras minúsculas, já que a linguagem não diferencia
+// maiúsculas de minúsculas (num_1 e NUM_1 são o mesmo identificador)
+void para_minusculo(char *destino, const char *origem) {
+    int i;
+    for (i = 0; origem[i] != '\0'; i++)
+        destino[i] = tolower((unsigned char)origem[i]);
+    destino[i] = '\0';
+}
+
+// Procura o identificador declarado no escopo atual.
+// Dentro de uma rotina procura primeiro os locais (parâmetros e variáveis da rotina)
+// e depois os globais. Retorna NULL se o identificador não foi declarado.
+TNo *buscar_simbolo(const char *id) {
+    char chave[16];
+    TNo *no;
+    para_minusculo(chave, id);
+    int entrada = hashMack(chave);
+
+    if (rotina_atual != NULL) {
+        for (no = tabela.entradas[entrada]; no != NULL; no = no->prox)
+            if (no->rotina == rotina_atual && strcmp(no->ID, chave) == 0)
+                return no;
+    }
+    for (no = tabela.entradas[entrada]; no != NULL; no = no->prox)
+        if (no->rotina == NULL && strcmp(no->ID, chave) == 0)
+            return no;
+    return NULL;
+}
+
+// Insere o identificador no escopo atual (global ou da rotina atual).
+// Retorna NULL se o identificador já existe nesse mesmo escopo.
+TNo *inserir_simbolo(const char *id, TCategoria categoria) {
+    char chave[16];
+    TNo *no;
+    para_minusculo(chave, id);
+    int entrada = hashMack(chave);
+
+    // identificador repetido no mesmo escopo
+    for (no = tabela.entradas[entrada]; no != NULL; no = no->prox)
+        if (no->rotina == rotina_atual && strcmp(no->ID, chave) == 0)
+            return NULL;
+
+    no = (TNo *)malloc(sizeof(TNo));
+    if (no == NULL) {
+        printf("Erro: memória insuficiente\n");
+        exit(1);
+    }
+    memset(no, 0, sizeof(TNo));
+    strcpy(no->ID, chave);
+    no->categoria = categoria;
+    no->rotina = rotina_atual;
+    no->nivel = (rotina_atual == NULL) ? 0 : 1;
+
+    // insere no começo da lista encadeada da entrada
+    no->prox = tabela.entradas[entrada];
+    tabela.entradas[entrada] = no;
+    return no;
+}
+
 /* ===================== VARIÁVEIS GLOBAIS DO LÉXICO ===================== */
 char *buffer;          // posição atual de leitura no código fonte
 char *inicio_buffer;   // início do buffer (usado para liberar a memória)
