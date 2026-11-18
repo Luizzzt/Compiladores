@@ -574,6 +574,7 @@ void comando_saida(void);
 void comando_condicional(void);
 void comando_repeticao(void);
 void lista_expressao(void);
+void argumentos(TNo *rotina);
 void expressao(void);
 void expressao_simples(void);
 void termo(void);
@@ -645,6 +646,21 @@ TNo *declara_identificador(TCategoria categoria) {
     if (no == NULL)
         erro_semantico(linha_ultimo_id, "identificador [%s] ja foi declarado neste escopo", ultimo_id);
     return no;
+}
+
+// Consome um identificador usado no corpo do programa e devolve o nó dele na tabela.
+// Se o identificador nao foi declarado ocorre erro semântico.
+TNo *usa_identificador(void) {
+    consome_identificador();
+    TNo *no = buscar_simbolo(ultimo_id);
+    if (no == NULL)
+        erro_semantico(linha_ultimo_id, "identificador [%s] nao foi declarado", ultimo_id);
+    return no;
+}
+
+// Retorna 1 se o identificador pode ser usado como variável (variável ou parâmetro)
+int eh_variavel(TNo *no) {
+    return no->categoria == CAT_VARIAVEL || no->categoria == CAT_PARAMETRO;
 }
 
 // <programa> ::= algoritmo identificador ';' <bloco> '.'
@@ -820,26 +836,63 @@ void comando(void) {
 // <chamada_procedimento> ::= identificador [ '(' <lista_expressao> ')' ]
 // Os dois começam com identificador, então o próximo átomo decide qual é.
 void comando_atribuicao_ou_chamada(void) {
-    consome(IDENTIFICADOR);
+    TNo *no = usa_identificador();
+    int linha = linha_ultimo_id;
+
     if (lookahead == ATRIBUICAO) {
+        // pode receber valor: variável, parâmetro ou o nome da funçao
+        // dentro dela mesma (valor de retorno)
+        if (!eh_variavel(no) && !(no->categoria == CAT_FUNCAO && no == rotina_atual))
+            erro_semantico(linha, "[%s] e %s e nao pode receber atribuicao",
+                           no->ID, nome_categoria[no->categoria]);
         consome(ATRIBUICAO);
         expressao();
     }
-    else if (lookahead == ABRE_PAR) {
+    else {
+        if (no->categoria != CAT_PROCEDIMENTO)
+            erro_semantico(linha, "[%s] e %s e nao pode ser chamado como procedimento",
+                           no->ID, nome_categoria[no->categoria]);
+        argumentos(no);
+    }
+}
+
+// Argumentos da chamada de função ou procedimento: [ '(' <lista_expressao> ')' ]
+// Confere se a quantidade de argumentos é igual à quantidade de parâmetros.
+void argumentos(TNo *rotina) {
+    int linha = linha_ultimo_id;
+    int quantidade = 0;
+    if (lookahead == ABRE_PAR) {
         consome(ABRE_PAR);
-        lista_expressao();
+        expressao();
+        quantidade++;
+        while (lookahead == VIRGULA) {
+            consome(VIRGULA);
+            expressao();
+            quantidade++;
+        }
         consome(FECHA_PAR);
     }
+    if (quantidade != rotina->num_parametros)
+        erro_semantico(linha, "[%s] espera %d parametro(s) e recebeu %d",
+                       rotina->ID, rotina->num_parametros, quantidade);
+}
+
+// Identificador do comando leia: precisa ser variável ou parâmetro
+void le_variavel(void) {
+    TNo *no = usa_identificador();
+    if (!eh_variavel(no))
+        erro_semantico(linha_ultimo_id, "[%s] e %s e nao pode ser usado no leia",
+                       no->ID, nome_categoria[no->categoria]);
 }
 
 // <comando_entrada> ::= leia '(' identificador { ',' identificador } ')'
 void comando_entrada(void) {
     consome(LEIA);
     consome(ABRE_PAR);
-    consome(IDENTIFICADOR);
+    le_variavel();
     while (lookahead == VIRGULA) {
         consome(VIRGULA);
-        consome(IDENTIFICADOR);
+        le_variavel();
     }
     consome(FECHA_PAR);
 }
@@ -916,14 +969,22 @@ void termo(void) {
 //             '(' <expressao> ')' | ( '+' | '-' | nao ) <fator> | verdadeiro | falso
 void fator(void) {
     switch (lookahead) {
-        case IDENTIFICADOR:
-            consome(IDENTIFICADOR);
-            if (lookahead == ABRE_PAR) {
-                consome(ABRE_PAR);
-                lista_expressao();
-                consome(FECHA_PAR);
+        case IDENTIFICADOR: {
+            TNo *no = usa_identificador();
+            if (no->categoria == CAT_FUNCAO) {
+                argumentos(no);        // chamada de função
+            }
+            else if (eh_variavel(no)) {
+                if (lookahead == ABRE_PAR)
+                    erro_semantico(linha_ultimo_id, "[%s] e %s e nao pode ser chamado como funcao",
+                                   no->ID, nome_categoria[no->categoria]);
+            }
+            else {
+                erro_semantico(linha_ultimo_id, "[%s] e %s e nao pode ser usado em expressao",
+                               no->ID, nome_categoria[no->categoria]);
             }
             break;
+        }
         case CONSTINT:   consome(CONSTINT);   break;
         case CONSTCHAR:  consome(CONSTCHAR);  break;
         case VERDADEIRO: consome(VERDADEIRO); break;
