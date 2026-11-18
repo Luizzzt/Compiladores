@@ -99,12 +99,11 @@ typedef struct _TNo {
     int endereco;           // deslocamento na MEPA (variável, parâmetro ou retorno da função)
     TCategoria categoria;
     int nivel;              // 0 = escopo global, 1 = escopo local (dentro de rotina)
-    TAtomo tipo;            // tipo da variável/parâmetro ou tipo de retorno da função
     int por_referencia;     // 1 se for parâmetro declarado com var
     struct _TNo *rotina;    // rotina onde o identificador local foi declarado (NULL se global)
     int rotulo;             // rótulo MEPA onde começa a função ou procedimento
     int num_parametros;     // quantidade de parâmetros da função ou procedimento
-    int ref_parametros[MAX_PARAMETROS]; // 1 se o i-ésimo parâmetro é por referência
+    struct _TNo *parametros[MAX_PARAMETROS]; // parâmetros da rotina na ordem declarada
     struct _TNo *prox;
 } TNo;
 
@@ -210,6 +209,7 @@ TInfoAtomo info_atomo;  // informações do átomo atual
 /* ===================== VARIÁVEIS GLOBAIS DO SEMÂNTICO ===================== */
 char ultimo_id[16];     // lexema do último identificador consumido
 int linha_ultimo_id;    // linha do último identificador consumido
+int proximo_endereco;   // próximo endereço livre para variável no escopo atual
 
 /* ===================== LEITURA DO ARQUIVO ===================== */
 
@@ -558,8 +558,8 @@ TInfoAtomo obter_atomo(void) {
 // protótipos das funções da gramática
 void programa(void);
 void bloco(void);
-void declaracao_variaveis(void);
-void lista_variaveis(void);
+int declaracao_variaveis(void);
+void lista_variaveis(TCategoria categoria, int por_referencia);
 void declaracao_de_rotinas(void);
 void declaracao_de_funcao(void);
 void declaracao_de_procedimento(void);
@@ -651,6 +651,7 @@ TNo *declara_identificador(TCategoria categoria) {
 void programa(void) {
     consome(ALGORITMO);
     declara_identificador(CAT_PROGRAMA);
+    proximo_endereco = 0;   // variáveis globais começam no endereço 0 de D[0]
     consome(PONTO_VIRGULA);
     bloco();
     consome(PONTO);
@@ -664,24 +665,43 @@ void bloco(void) {
 }
 
 // <declaracao_variaveis> ::= [ var <lista_variaveis> ';' { <lista_variaveis> ';' } ]
-void declaracao_variaveis(void) {
+// Retorna quantas variaveis foram declaradas (usado no AMEM e DMEM)
+int declaracao_variaveis(void) {
+    int inicio = proximo_endereco;
     if (lookahead == VAR) {
         consome(VAR);
-        lista_variaveis();
+        lista_variaveis(CAT_VARIAVEL, 0);
         consome(PONTO_VIRGULA);
         while (lookahead == IDENTIFICADOR) {
-            lista_variaveis();
+            lista_variaveis(CAT_VARIAVEL, 0);
             consome(PONTO_VIRGULA);
         }
+    }
+    return proximo_endereco - inicio;
+}
+
+// Declara um identificador da lista: variável recebe o próximo endereço livre,
+// parâmetro é guardado na rotina atual (o endereço é calculado depois)
+void declara_variavel_ou_parametro(TCategoria categoria, int por_referencia) {
+    TNo *no = declara_identificador(categoria);
+    if (categoria == CAT_VARIAVEL) {
+        no->endereco = proximo_endereco++;
+    }
+    else {
+        if (rotina_atual->num_parametros == MAX_PARAMETROS)
+            erro_semantico(linha_ultimo_id, "rotina [%s] com mais de %d parametros",
+                           rotina_atual->ID, MAX_PARAMETROS);
+        no->por_referencia = por_referencia;
+        rotina_atual->parametros[rotina_atual->num_parametros++] = no;
     }
 }
 
 // <lista_variaveis> ::= identificador { ',' identificador } ':' <tipo>
-void lista_variaveis(void) {
-    consome(IDENTIFICADOR);
+void lista_variaveis(TCategoria categoria, int por_referencia) {
+    declara_variavel_ou_parametro(categoria, por_referencia);
     while (lookahead == VIRGULA) {
         consome(VIRGULA);
-        consome(IDENTIFICADOR);
+        declara_variavel_ou_parametro(categoria, por_referencia);
     }
     consome(DOIS_PONTOS);
     tipo();
@@ -705,7 +725,10 @@ void declaracao_de_funcao(void) {
     TNo *funcao = declara_identificador(CAT_FUNCAO);   // nome da função é global
 
     rotina_atual = funcao;     // a partir daqui o escopo é local
+    proximo_endereco = 0;      // variáveis locais começam no endereço 0 de D[1]
     parametros_formais();
+    // o valor de retorno fica logo abaixo dos parâmetros na pilha: -(n+3)
+    funcao->endereco = -(funcao->num_parametros + 3);
     declaracao_variaveis();
     comando_composto();
     rotina_atual = NULL;       // volta para o escopo global
@@ -718,6 +741,7 @@ void declaracao_de_procedimento(void) {
     TNo *procedimento = declara_identificador(CAT_PROCEDIMENTO);   // nome é global
 
     rotina_atual = procedimento;   // a partir daqui o escopo é local
+    proximo_endereco = 0;          // variáveis locais começam no endereço 0 de D[1]
     parametros_formais();
     declaracao_variaveis();
     comando_composto();
@@ -725,6 +749,8 @@ void declaracao_de_procedimento(void) {
 }
 
 // <parametros_formais> ::= '(' <parametro_formal> { ';' <parametro_formal> } ')' | '(' ')'
+// Depois de ler todos os parâmetros calcula o endereço de cada um.
+// Com n parâmetros, o i-ésimo (i começa em 1) fica em -(n+3-i) relativo a D[1].
 void parametros_formais(void) {
     consome(ABRE_PAR);
     if (lookahead != FECHA_PAR) {
@@ -735,13 +761,21 @@ void parametros_formais(void) {
         }
     }
     consome(FECHA_PAR);
+
+    int n = rotina_atual->num_parametros;
+    for (int i = 1; i <= n; i++)
+        rotina_atual->parametros[i - 1]->endereco = -(n + 3 - i);
 }
 
 // <parametro_formal> ::= [ var ] <lista_variaveis>
+// Com var o parâmetro é passado por referência sem var é passado por valor
 void parametro_formal(void) {
-    if (lookahead == VAR)
+    int por_referencia = 0;
+    if (lookahead == VAR) {
         consome(VAR);
-    lista_variaveis();
+        por_referencia = 1;
+    }
+    lista_variaveis(CAT_PARAMETRO, por_referencia);
 }
 
 // <tipo> ::= caractere | inteiro | logico
