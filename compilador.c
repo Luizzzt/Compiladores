@@ -196,6 +196,70 @@ TNo *inserir_simbolo(const char *id, TCategoria categoria) {
     return no;
 }
 
+/* ===================== GERAÇÃO DE CÓDIGO MEPA ===================== */
+// O código MEPA é guardado em memória e só é impresso no final da compilação,
+// assim se acontecer algum erro, nenhuma instrução aparece na saída.
+char *codigo = NULL;        // texto com as instruções MEPA geradas
+size_t tamanho_codigo = 0;  // quantidade de caracteres usados em 'codigo'
+size_t capacidade_codigo = 0;
+int contador_rotulo = 0;    // último rótulo usado (L1, L2, ...)
+
+// Acrescenta um texto ja formatado no fim do codigo
+void acrescenta_codigo(const char *texto, size_t tamanho) {
+    if (tamanho_codigo + tamanho + 1 > capacidade_codigo) {
+        size_t nova = (capacidade_codigo == 0) ? 1024 : capacidade_codigo * 2;
+        while (nova < tamanho_codigo + tamanho + 1)
+            nova *= 2;
+        char *novo = (char *)realloc(codigo, nova);
+        if (novo == NULL) {
+            printf("Erro: memória insuficiente\n");
+            exit(1);
+        }
+        codigo = novo;
+        capacidade_codigo = nova;
+    }
+    memcpy(codigo + tamanho_codigo, texto, tamanho);
+    tamanho_codigo += tamanho;
+    codigo[tamanho_codigo] = '\0';
+}
+
+// Gera uma instrução MEPA (mesmo formato do printf), ex: gera("CRVL %d,%d", 0, 1)
+void gera(const char *formato, ...) {
+    char linha[64];
+    va_list args;
+    va_start(args, formato);
+    int n = vsnprintf(linha + 3, sizeof(linha) - 4, formato, args);
+    va_end(args);
+    memcpy(linha, "   ", 3);   // recuo das instruções, como nos exemplos da MEPA
+    n += 3;
+    linha[n++] = '\n';
+    acrescenta_codigo(linha, n);
+}
+
+// Gera a linha de um rótulo: Ln:NADA
+void gera_rotulo(int rotulo) {
+    char linha[32];
+    int n = sprintf(linha, "L%d:NADA\n", rotulo);
+    acrescenta_codigo(linha, n);
+}
+
+// Retorna o próximo rótulo livre (1, 2, 3, ...)
+int proximo_rotulo(void) {
+    return ++contador_rotulo;
+}
+
+// Imprime todo o código MEPA gerado
+void imprimir_codigo(void) {
+    if (codigo != NULL)
+        printf("%s", codigo);
+}
+
+void liberar_codigo(void) {
+    free(codigo);
+    codigo = NULL;
+    tamanho_codigo = capacidade_codigo = 0;
+}
+
 /* ===================== VARIÁVEIS GLOBAIS DO LÉXICO ===================== */
 char *buffer;          // posição atual de leitura no código fonte
 char *inicio_buffer;   // início do buffer (usado para liberar a memória)
@@ -581,10 +645,11 @@ void termo(void);
 void fator(void);
 
 // Libera a memória e termina o programa
-void encerrar(int codigo) {
+void encerrar(int codigo_saida) {
     liberar_buffer();
     liberar_tabela();
-    exit(codigo);
+    liberar_codigo();
+    exit(codigo_saida);
 }
 
 // Mostra o erro sintático e termina a execução
@@ -1019,8 +1084,10 @@ int main(int argc, char *argv[]) {
     programa();        // símbolo inicial da gramática
     consome(EOS);
 
+    imprimir_codigo();
     printf("%d linhas analisadas, programa sintaticamente correto\n", contar_linhas());
     liberar_buffer();
     liberar_tabela();
+    liberar_codigo();
     return 0;
 }
