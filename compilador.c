@@ -734,15 +734,36 @@ void programa(void) {
     declara_identificador(CAT_PROGRAMA);
     proximo_endereco = 0;   // variáveis globais começam no endereço 0 de D[0]
     consome(PONTO_VIRGULA);
+    gera("INPP");
     bloco();
     consome(PONTO);
+    gera("PARA");
 }
 
 // <bloco> ::= <declaracao_variaveis> <declaracao_de_rotinas> <comando_composto>
+// MEPA:  AMEM n            (variáveis globais)
+//        DSVS Lp           (pula o codigo das rotinas se existirem)
+//        ... rotinas ...
+//     Lp:NADA
+//        ... comandos do programa principal ...
+//        DMEM n
 void bloco(void) {
-    declaracao_variaveis();
+    int num_variaveis = declaracao_variaveis();
+    if (num_variaveis > 0)
+        gera("AMEM %d", num_variaveis);
+
+    int rotulo_principal = 0;
+    if (lookahead == FUNCAO || lookahead == PROCEDIMENTO) {
+        rotulo_principal = proximo_rotulo();
+        gera("DSVS L%d", rotulo_principal);
+    }
     declaracao_de_rotinas();
+    if (rotulo_principal != 0)
+        gera_rotulo(rotulo_principal);
+
     comando_composto();
+    if (num_variaveis > 0)
+        gera("DMEM %d", num_variaveis);
 }
 
 // <declaracao_variaveis> ::= [ var <lista_variaveis> ';' { <lista_variaveis> ';' } ]
