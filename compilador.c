@@ -728,6 +728,16 @@ int eh_variavel(TNo *no) {
     return no->categoria == CAT_VARIAVEL || no->categoria == CAT_PARAMETRO;
 }
 
+// Gera o código que empilha o valor da variável ou parâmetro.
+// nivel 0 = global (D[0]), nivel 1 = local (D[1]).
+// Parametro por referência guarda o endereço entao usa carga indireta (CRVI).
+void carrega_variavel(TNo *no) {
+    if (no->categoria == CAT_PARAMETRO && no->por_referencia)
+        gera("CRVI %d,%d", no->nivel, no->endereco);
+    else
+        gera("CRVL %d,%d", no->nivel, no->endereco);
+}
+
 // <programa> ::= algoritmo identificador ';' <bloco> '.'
 void programa(void) {
     consome(ALGORITMO);
@@ -1033,11 +1043,17 @@ void expressao(void) {
 
 // <expressao_simples> ::= <termo> { <operador_adicao> <termo> }
 // <operador_adicao> ::= '+' | '-' | mod | ou
+// A instrução do operador é gerada depois dos dois operandos (notação pós-fixa)
 void expressao_simples(void) {
     termo();
     while (lookahead == MAIS || lookahead == MENOS || lookahead == MOD || lookahead == OU) {
+        TAtomo operador = lookahead;
         consome(lookahead);
         termo();
+        if (operador == MAIS)
+            gera("SOMA");
+        else if (operador == MENOS)
+            gera("SUBT");
     }
 }
 
@@ -1046,8 +1062,15 @@ void expressao_simples(void) {
 void termo(void) {
     fator();
     while (lookahead == VEZES || lookahead == DIV || lookahead == E) {
+        TAtomo operador = lookahead;
         consome(lookahead);
         fator();
+        if (operador == VEZES)
+            gera("MULT");
+        else if (operador == DIV)
+            gera("DIVI");
+        else
+            gera("CONJ");
     }
 }
 
@@ -1064,6 +1087,7 @@ void fator(void) {
                 if (lookahead == ABRE_PAR)
                     erro_semantico(linha_ultimo_id, "[%s] e %s e nao pode ser chamado como funcao",
                                    no->ID, nome_categoria[no->categoria]);
+                carrega_variavel(no);
             }
             else {
                 erro_semantico(linha_ultimo_id, "[%s] e %s e nao pode ser usado em expressao",
@@ -1071,19 +1095,38 @@ void fator(void) {
             }
             break;
         }
-        case CONSTINT:   consome(CONSTINT);   break;
-        case CONSTCHAR:  consome(CONSTCHAR);  break;
-        case VERDADEIRO: consome(VERDADEIRO); break;
-        case FALSO:      consome(FALSO);      break;
+        case CONSTINT:
+            gera("CRCT %d", info_atomo.atributo.numero);
+            consome(CONSTINT);
+            break;
+        case CONSTCHAR:   // o caractere vira o seu código ASCII
+            gera("CRCT %d", (int)info_atomo.atributo.ch);
+            consome(CONSTCHAR);
+            break;
+        case VERDADEIRO:  // verdadeiro = 1 e falso = 0
+            gera("CRCT 1");
+            consome(VERDADEIRO);
+            break;
+        case FALSO:
+            gera("CRCT 0");
+            consome(FALSO);
+            break;
         case ABRE_PAR:
             consome(ABRE_PAR);
             expressao();
             consome(FECHA_PAR);
             break;
-        case MAIS:
-        case MENOS:
+        case MAIS:        // + unário não muda o valor
+            consome(MAIS);
+            fator();
+            break;
+        case MENOS:       // - unario inverte o sinal
+            consome(MENOS);
+            fator();
+            gera("INVR");
+            break;
         case NAO:
-            consome(lookahead);
+            consome(NAO);
             fator();
             break;
         default:
