@@ -248,6 +248,20 @@ int proximo_rotulo(void) {
     return ++contador_rotulo;
 }
 
+// Gera de novo uma cópia do trecho de codgo que está entre as posições inicio e fim.
+// É usado no operador mod que não existe na MEPA.
+void repete_codigo(size_t inicio, size_t fim) {
+    size_t tamanho = fim - inicio;
+    char *copia = (char *)malloc(tamanho + 1);
+    if (copia == NULL) {
+        printf("Erro: memória insuficiente\n");
+        exit(1);
+    }
+    memcpy(copia, codigo + inicio, tamanho);   // copia antes pois o realoc pode mover 'codigo'
+    acrescenta_codigo(copia, tamanho);
+    free(copia);
+}
+
 // Imprime todo o código MEPA gerado
 void imprimir_codigo(void) {
     if (codigo != NULL)
@@ -1036,15 +1050,30 @@ void expressao(void) {
     expressao_simples();
     if (lookahead == DIFERENTE || lookahead == MENOR || lookahead == MENOR_IGUAL ||
         lookahead == MAIOR_IGUAL || lookahead == MAIOR || lookahead == IGUAL) {
+        TAtomo operador = lookahead;
         consome(lookahead);
         expressao_simples();
+        switch (operador) {
+            case DIFERENTE:   gera("CMDG"); break;
+            case MENOR:       gera("CMME"); break;
+            case MENOR_IGUAL: gera("CMEG"); break;
+            case MAIOR_IGUAL: gera("CMAG"); break;
+            case MAIOR:       gera("CMMA"); break;
+            default:          gera("CMIG"); break;   // IGUAL
+        }
     }
 }
 
 // <expressao_simples> ::= <termo> { <operador_adicao> <termo> }
 // <operador_adicao> ::= '+' | '-' | mod | ou
 // A instrução do operador é gerada depois dos dois operandos (notação pós-fixa)
+//
+// A MEPA não tem instrução para o resto da divisao, então a mod b é calculado
+// como a - (a div b) * b. O código de a e b é gerado de novo depois deles:
+//   [a] [b] [a] [b] DIVI MULT SUBT
+// pilha: a b a b -> a b (a div b) -> a (b * (a div b)) -> a - b * (a div b)
 void expressao_simples(void) {
+    size_t inicio = tamanho_codigo;   // onde começa o código do operando da esquerda
     termo();
     while (lookahead == MAIS || lookahead == MENOS || lookahead == MOD || lookahead == OU) {
         TAtomo operador = lookahead;
@@ -1054,6 +1083,14 @@ void expressao_simples(void) {
             gera("SOMA");
         else if (operador == MENOS)
             gera("SUBT");
+        else if (operador == OU)
+            gera("DISJ");
+        else {   // MOD
+            repete_codigo(inicio, tamanho_codigo);
+            gera("DIVI");
+            gera("MULT");
+            gera("SUBT");
+        }
     }
 }
 
@@ -1125,9 +1162,10 @@ void fator(void) {
             fator();
             gera("INVR");
             break;
-        case NAO:
+        case NAO:         // nao inverte o valor logco (1 vira 0 e 0 vira 1)
             consome(NAO);
             fator();
+            gera("NEGA");
             break;
         default:
             erro_sintatico("fator");
