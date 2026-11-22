@@ -642,6 +642,7 @@ void declaracao_de_rotinas(void);
 void declaracao_de_funcao(void);
 void declaracao_de_procedimento(void);
 void parametros_formais(void);
+void corpo_rotina(TNo *rotina);
 void parametro_formal(void);
 void tipo(void);
 void comando_composto(void);
@@ -849,21 +850,49 @@ void declaracao_de_rotinas(void) {
     }
 }
 
+// Parte comum da funcão e do procedimento:
+//   <parametros_formais> <declaracao_variaveis> <comando_composto>
+// MEPA:   Lr:NADA
+//            ENPR
+//            AMEM k      (variáveis locais)
+//            [comandos]
+//            DMEM k
+//            RTPR 0
+// Observacao: no interpretador da MEPA usado na disciplina a instrução RTPR n
+// não retira os n parâmetros da pilha (só retira o endereço de retorno e o D[1]
+// salvo). Por isso é gerado RTPR 0 e quem chama a rotina retira os parametos
+// com DMEM n logo depois do CHPR. Assim o código funciona tanto nesse
+// interpretador quanto numa MEPA que siga a definiçao da aula.
+void corpo_rotina(TNo *rotina) {
+    rotina_atual = rotina;     // a partir daqui o escopo é local
+    proximo_endereco = 0;      // variáveis locais começam no endereço 0 de D[1]
+    rotina->rotulo = proximo_rotulo();
+    gera_rotulo(rotina->rotulo);
+    gera("ENPR");
+
+    parametros_formais();
+    if (rotina->categoria == CAT_FUNCAO)
+        // o valor de retorno fica logo abaixo dos parâmetros na pilha: -(n+3)
+        rotina->endereco = -(rotina->num_parametros + 3);
+
+    int num_locais = declaracao_variaveis();
+    if (num_locais > 0)
+        gera("AMEM %d", num_locais);
+    comando_composto();
+    if (num_locais > 0)
+        gera("DMEM %d", num_locais);
+    gera("RTPR 0");
+
+    rotina_atual = NULL;       // volta para o escopo global
+}
+
 // <declaracao_de_funcao> ::= funcao <tipo> identificador <parametros_formais>
 //                            <declaracao_variaveis> <comando_composto>
 void declaracao_de_funcao(void) {
     consome(FUNCAO);
     tipo();
     TNo *funcao = declara_identificador(CAT_FUNCAO);   // nome da função é global
-
-    rotina_atual = funcao;     // a partir daqui o escopo é local
-    proximo_endereco = 0;      // variáveis locais começam no endereço 0 de D[1]
-    parametros_formais();
-    // o valor de retorno fica logo abaixo dos parâmetros na pilha: -(n+3)
-    funcao->endereco = -(funcao->num_parametros + 3);
-    declaracao_variaveis();
-    comando_composto();
-    rotina_atual = NULL;       // volta para o escopo global
+    corpo_rotina(funcao);
 }
 
 // <declaracao_de_procedimento> ::= procedimento identificador <parametros_formais>
@@ -871,13 +900,7 @@ void declaracao_de_funcao(void) {
 void declaracao_de_procedimento(void) {
     consome(PROCEDIMENTO);
     TNo *procedimento = declara_identificador(CAT_PROCEDIMENTO);   // nome é global
-
-    rotina_atual = procedimento;   // a partir daqui o escopo é local
-    proximo_endereco = 0;          // variáveis locais começam no endereço 0 de D[1]
-    parametros_formais();
-    declaracao_variaveis();
-    comando_composto();
-    rotina_atual = NULL;           // volta para o escopo global
+    corpo_rotina(procedimento);
 }
 
 // <parametros_formais> ::= '(' <parametro_formal> { ';' <parametro_formal> } ')' | '(' ')'
@@ -978,6 +1001,8 @@ void comando_atribuicao_ou_chamada(void) {
 
 // Argumentos da chamada de função ou procedimento: [ '(' <lista_expressao> ')' ]
 // Confere se a quantidade de argumentos é igual à quantidade de parâmetros.
+// MEPA: cada argumento é empilhado na ordem, depois CHPR Lr e DMEM n
+// (o DMEM retira os parâmetros da pilha veja o comentario de corpo_rotina)
 void argumentos(TNo *rotina) {
     int linha = linha_ultimo_id;
     int quantidade = 0;
@@ -995,6 +1020,9 @@ void argumentos(TNo *rotina) {
     if (quantidade != rotina->num_parametros)
         erro_semantico(linha, "[%s] espera %d parametro(s) e recebeu %d",
                        rotina->ID, rotina->num_parametros, quantidade);
+    gera("CHPR L%d", rotina->rotulo);
+    if (rotina->num_parametros > 0)
+        gera("DMEM %d", rotina->num_parametros);
 }
 
 // Identificador do comando leia: precisa ser variável ou parâmetro
