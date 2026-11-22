@@ -999,6 +999,32 @@ void comando_atribuicao_ou_chamada(void) {
     }
 }
 
+// Argumento passado para um parâmetro por referência (var) precisa ser uma variavel.
+// É empilhado o endereço da variável e não o seu valor:
+//   variável ou parâmetro por valor -> CREN nivel,endereco
+//   parâmetro por referência        -> CRVL nivel,endereco (ele já guarda um endereço)
+void argumento_referencia(TNo *rotina) {
+    if (lookahead != IDENTIFICADOR)
+        erro_semantico(info_atomo.linha, "parametro por referencia de [%s] precisa receber uma variavel",
+                       rotina->ID);
+    TNo *no = usa_identificador();
+    if (!eh_variavel(no) || (lookahead != VIRGULA && lookahead != FECHA_PAR))
+        erro_semantico(linha_ultimo_id, "parametro por referencia de [%s] precisa receber uma variavel",
+                       rotina->ID);
+    if (no->categoria == CAT_PARAMETRO && no->por_referencia)
+        gera("CRVL %d,%d", no->nivel, no->endereco);
+    else
+        gera("CREN %d,%d", no->nivel, no->endereco);
+}
+
+// Um argumento da chamada: usa a forma de passagem do parâmetro na mesma posiçao
+void argumento(TNo *rotina, int posicao) {
+    if (posicao < rotina->num_parametros && rotina->parametros[posicao]->por_referencia)
+        argumento_referencia(rotina);
+    else
+        expressao();   // passagem por valor: empilha o valor da expresão
+}
+
 // Argumentos da chamada de função ou procedimento: [ '(' <lista_expressao> ')' ]
 // Confere se a quantidade de argumentos é igual à quantidade de parâmetros.
 // MEPA: cada argumento é empilhado na ordem, depois CHPR Lr e DMEM n
@@ -1008,11 +1034,11 @@ void argumentos(TNo *rotina) {
     int quantidade = 0;
     if (lookahead == ABRE_PAR) {
         consome(ABRE_PAR);
-        expressao();
+        argumento(rotina, quantidade);
         quantidade++;
         while (lookahead == VIRGULA) {
             consome(VIRGULA);
-            expressao();
+            argumento(rotina, quantidade);
             quantidade++;
         }
         consome(FECHA_PAR);
@@ -1184,7 +1210,10 @@ void fator(void) {
         case IDENTIFICADOR: {
             TNo *no = usa_identificador();
             if (no->categoria == CAT_FUNCAO) {
-                argumentos(no);        // chamada de função
+                // chamada de função: AMEM 1 reserva o espaço do valor de retorno,
+                // que fica no topo da pilha depois que os parâmetros sao retirados
+                gera("AMEM 1");
+                argumentos(no);
             }
             else if (eh_variavel(no)) {
                 if (lookahead == ABRE_PAR)
