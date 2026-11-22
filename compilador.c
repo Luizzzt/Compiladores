@@ -1035,23 +1035,51 @@ void comando_saida(void) {
 }
 
 // <comando_condicional> ::= se <expressao> entao <comando> [ senao <comando> ]
+// MEPA:      [expressao]             MEPA sem senao:    [expressao]
+//            DSVF L1                                     DSVF L1
+//            [comando do entao]                          [comando do entao]
+//            DSVS L2                                  L1:NADA
+//         L1:NADA
+//            [comando do senao]
+//         L2:NADA
 void comando_condicional(void) {
+    int rotulo_falso = proximo_rotulo();
     consome(SE);
     expressao();
+    gera("DSVF L%d", rotulo_falso);
     consome(ENTAO);
     comando();
     if (lookahead == SENAO) {
+        int rotulo_fim = proximo_rotulo();
+        gera("DSVS L%d", rotulo_fim);
+        gera_rotulo(rotulo_falso);
         consome(SENAO);
         comando();
+        gera_rotulo(rotulo_fim);
+    }
+    else {
+        gera_rotulo(rotulo_falso);
     }
 }
 
 // <comando_repeticao> ::= enquanto <expressao> faca <comando>
+// MEPA:   L1:NADA
+//            [expressao]
+//            DSVF L2
+//            [comando]
+//            DSVS L1
+//         L2:NADA
 void comando_repeticao(void) {
+    int rotulo_inicio = proximo_rotulo();
+    int rotulo_fim = proximo_rotulo();
     consome(ENQUANTO);
+    gera_rotulo(rotulo_inicio);
     expressao();
+    gera("DSVF L%d", rotulo_fim);
     consome(FACA);
     comando();
+    gera("DSVS L%d", rotulo_inicio);
+    gera_rotulo(rotulo_fim);
 }
 
 // <expressao> ::= <expressao_simples> [ <operador_relacional> <expressao_simples> ]
