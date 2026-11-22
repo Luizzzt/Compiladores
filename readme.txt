@@ -1,4 +1,5 @@
 Compilador Portugol - Fase 2 (semantico + geracao de codigo MEPA)
+Luiz Fernando Ferrari Batistela - 10427397
 
 Pra compilar:
     gcc -Wall -Wno-unused-result -g -Og compilador.c hash_mack.o -o compilador
