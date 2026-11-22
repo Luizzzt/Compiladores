@@ -651,7 +651,6 @@ void comando_entrada(void);
 void comando_saida(void);
 void comando_condicional(void);
 void comando_repeticao(void);
-void lista_expressao(void);
 void argumentos(TNo *rotina);
 void expressao(void);
 void expressao_simples(void);
@@ -752,6 +751,15 @@ void carrega_variavel(TNo *no) {
         gera("CRVL %d,%d", no->nivel, no->endereco);
 }
 
+// Gera o código que tira o valor do topo da pilha e guarda na varável ou parâmetro.
+// Parametro por referencia usa armazenamento indireto (ARMI).
+void armazena_variavel(TNo *no) {
+    if (no->categoria == CAT_PARAMETRO && no->por_referencia)
+        gera("ARMI %d,%d", no->nivel, no->endereco);
+    else
+        gera("ARMZ %d,%d", no->nivel, no->endereco);
+}
+
 // <programa> ::= algoritmo identificador ';' <bloco> '.'
 void programa(void) {
     consome(ALGORITMO);
@@ -768,7 +776,8 @@ void programa(void) {
 // MEPA:  AMEM n            (variáveis globais)
 //        DSVS Lp           (pula o codigo das rotinas se existirem)
 //        ... rotinas ...
-//     Lp:NADA
+//     Lp:NADA              (sempre gerado: o interpretador da MEPA nao executa
+//                           programas que não têm nenhum rótulo)
 //        ... comandos do programa principal ...
 //        DMEM n
 void bloco(void) {
@@ -776,14 +785,11 @@ void bloco(void) {
     if (num_variaveis > 0)
         gera("AMEM %d", num_variaveis);
 
-    int rotulo_principal = 0;
-    if (lookahead == FUNCAO || lookahead == PROCEDIMENTO) {
-        rotulo_principal = proximo_rotulo();
+    int rotulo_principal = proximo_rotulo();
+    if (lookahead == FUNCAO || lookahead == PROCEDIMENTO)
         gera("DSVS L%d", rotulo_principal);
-    }
     declaracao_de_rotinas();
-    if (rotulo_principal != 0)
-        gera_rotulo(rotulo_principal);
+    gera_rotulo(rotulo_principal);
 
     comando_composto();
     if (num_variaveis > 0)
@@ -957,6 +963,10 @@ void comando_atribuicao_ou_chamada(void) {
                            no->ID, nome_categoria[no->categoria]);
         consome(ATRIBUICAO);
         expressao();
+        if (no->categoria == CAT_FUNCAO)
+            gera("ARMZ 1,%d", no->endereco);   // valor de retono da função
+        else
+            armazena_variavel(no);
     }
     else {
         if (no->categoria != CAT_PROCEDIMENTO)
@@ -993,6 +1003,8 @@ void le_variavel(void) {
     if (!eh_variavel(no))
         erro_semantico(linha_ultimo_id, "[%s] e %s e nao pode ser usado no leia",
                        no->ID, nome_categoria[no->categoria]);
+    gera("LEIT");
+    armazena_variavel(no);
 }
 
 // <comando_entrada> ::= leia '(' identificador { ',' identificador } ')'
@@ -1008,10 +1020,17 @@ void comando_entrada(void) {
 }
 
 // <comando_saida> ::= escreva '(' <lista_expressao> ')'
+// Cada expressão da lista e calculada e impressa com IMPR
 void comando_saida(void) {
     consome(ESCREVA);
     consome(ABRE_PAR);
-    lista_expressao();
+    expressao();
+    gera("IMPR");
+    while (lookahead == VIRGULA) {
+        consome(VIRGULA);
+        expressao();
+        gera("IMPR");
+    }
     consome(FECHA_PAR);
 }
 
@@ -1033,15 +1052,6 @@ void comando_repeticao(void) {
     expressao();
     consome(FACA);
     comando();
-}
-
-// <lista_expressao> ::= <expressao> { ',' <expressao> }
-void lista_expressao(void) {
-    expressao();
-    while (lookahead == VIRGULA) {
-        consome(VIRGULA);
-        expressao();
-    }
 }
 
 // <expressao> ::= <expressao_simples> [ <operador_relacional> <expressao_simples> ]
