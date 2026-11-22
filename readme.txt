@@ -1,41 +1,56 @@
-Compilador Fase 1 - Análise Léxica e Sintática (Portugol)
+Compilador Portugol - Fase 2 (semantico + geracao de codigo MEPA)
 
-Como compilar:
-    gcc -Wall -Wno-unused-result -g -Og compilador.c -o compilador
+Pra compilar:
+    gcc -Wall -Wno-unused-result -g -Og compilador.c hash_mack.o -o compilador
 
-Como executar:
+Pra rodar:
     ./compilador <arquivo_fonte>
 
-Teste de memória:
+Pra testar memoria:
     valgrind --leak-check=yes ./compilador <arquivo_fonte>
 
-O que foi concluído:
-    - Analisador léxico completo: delimitadores, contagem de linhas, comentários
-      {- -}, identificadores (limite de 15 caracteres), palavras reservadas sem
-      diferenciar maiúsculas e minúsculas, constint (com notação exponencial,
-      ex: 12E2 = 1200), constchar e todos os símbolos.
-    - Analisador sintático descendente recursivo completo, com uma função para
-      cada regra da gramática.
-    - Mensagens de erro léxico e sintático com a linha do erro. No erro
-      sintático é mostrado o átomo esperado e o átomo encontrado.
+Pra rodar o codigo gerado na MEPA, copiei as linhas do INPP ate o PARA pra
+um arquivo .mepa e rodei:
+    ./mepa -r -f programa.mepa
 
-Decisões de projeto:
-    - Tudo está em um único arquivo (compilador.c), como pede o comando de
-      compilação
-    - O arquivo fonte é lido inteiro para um buffer em memória, que é liberado
-      no fim da execução (inclusive quando há erro), sem vazamento no valgrind.
-    - Os comentários são enviados ao sintático, que imprime e descarta cada um
-      na função proximo_atomo().
-    - A atribuição e a chamada de procedimento começam com identificador. Por
-      isso foram tratadas na mesma função, e o átomo seguinte (':=' ou não)
-      decide qual das duas é
-    - A palavra "nao" foi tratada como reservada porque aparece na gramática
-      (regra <fator>), mesmo não estando na lista de palavras reservadas
-    - A palavra "identificador" que aparece na lista de reservadas não foi
-      incluída, pois não é usada em nenhuma regra da gramática.
-    - Em caso de erro o programa termina com código de saída 1.
-    - O número de linhas analisadas é o total de linhas do arquivo fonte.
+O que o compilador mostra:
+    Se nao tiver erro, mostra o codigo MEPA e depois a tabela de simbolos
+    (entrada da hash, ID, categoria, escopo e endereco).
+    Se tiver erro, mostra so a linha e o tipo do erro (lexico, sintatico ou
+    semantico) e nao imprime nada de MEPA.
+
+O que foi feito:
+    - A fase 1 continua igual, so tirei a impressao dos atomos.
+    - Tabela de simbolos com hash (TNo e TTabelaSimbolos do enunciado) usando
+      o hashMack() do hash_mack.o. Cada entrada e uma lista encadeada.
+    - Erro semantico pra identificador repetido no mesmo escopo, identificador
+      nao declarado, uso errado (tipo chamar variavel como procedimento),
+      numero errado de argumentos e passar algo que nao e variavel pra
+      parametro var.
+    - Geracao de MEPA pra tudo: variaveis, atribuicao, leia, escreva, se/senao,
+      enquanto, expressoes, procedimentos, funcoes (inclusive recursivas) e
+      parametros por valor e por referencia.
+
+Algumas decisoes:
+    - O codigo MEPA vai sendo guardado num buffer e so e impresso no final,
+      assim se der erro no meio nao sai MEPA pela metade.
+    - Globais ficam no nivel 0 e o que e de dentro de rotina fica no nivel 1.
+      Os locais continuam na tabela depois que a rotina acaba (pra aparecer
+      na impressao), mas so sao achados dentro da propria rotina.
+    - Os identificadores sao salvos em minusculo porque a linguagem nao
+      diferencia maiuscula de minuscula.
+    - Parametros ficam em -(n+3-i) e o retorno da funcao em -(n+3). Quem chama
+      a funcao faz AMEM 1 antes dos argumentos.
+    - Parametro var: quem chama manda o endereco (CREN) e dentro da rotina usa
+      CRVI e ARMI.
+    - A MEPA nao tem mod, entao a mod b vira a - (a div b) * b.
+    - O interpretador da MEPA nao roda programa sem nenhum rotulo, entao o
+      rotulo do programa principal e sempre gerado.
+    - O interpretador tambem nao tira os parametros da pilha no RTPR n (o
+      procedimento3.mepa da aula fica em loop). Por isso usei RTPR 0 e quem
+      chama tira os parametros com DMEM n depois do CHPR.
 
 Bugs conhecidos:
-    - Constantes inteiras muito grandes acima do limite de int nao são
-      verificadas e estouram o valor.
+    - Numero inteiro muito grande estoura e nao da erro.
+    - No mod, se tiver chamada de funcao nos operandos a funcao roda 2 vezes.
+    - Nao tem verificacao de tipo (o enunciado deixa so inteiro).

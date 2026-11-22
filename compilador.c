@@ -1,7 +1,7 @@
-/*
+/* Luiz Fernando Ferrari Batistela - 10427397
  * Compilador Fase 2: Análise Semântica e Geração de Código MEPA da linguagem Portugol
  * (a fase 1, análise léxica e sintática, continua neste mesmo arquivo)
- *
+ * 
  * Compilar:
  *   gcc -Wall -Wno-unused-result -g -Og compilador.c hash_mack.o -o compilador
  * Executar:
@@ -120,6 +120,34 @@ TTabelaSimbolos tabela;     // tabela de símbolos do compilador
 void inicializar_tabela(void) {
     for (int i = 0; i < PRIME_NUMER; i++)
         tabela.entradas[i] = NULL;
+}
+
+// Imprime os identificadores guardados na tabela de simbolos.
+// Para variável e parâmetro tambem é impreso o endereço (nivel,deslocamento)
+// e para funçao o endereço do valor de retorno.
+void imprimir_tabela(void) {
+    printf("\nTABELA DE SIMBOLOS\n");
+    printf("%-8s %-16s %-14s %-28s %s\n", "Entrada", "ID", "Categoria", "Escopo", "Endereco");
+    for (int i = 0; i < PRIME_NUMER; i++) {
+        for (TNo *no = tabela.entradas[i]; no != NULL; no = no->prox) {
+            char categoria[20];
+            char escopo[32];
+            strcpy(categoria, nome_categoria[no->categoria]);
+            if (no->categoria == CAT_PARAMETRO && no->por_referencia)
+                strcat(categoria, " var");
+            if (no->rotina == NULL)
+                strcpy(escopo, "global");
+            else
+                sprintf(escopo, "local de %s", no->rotina->ID);
+
+            printf("%-8d %-16s %-14s %-28s", i, no->ID, categoria, escopo);
+            if (no->categoria == CAT_VARIAVEL || no->categoria == CAT_PARAMETRO)
+                printf(" %d,%d", no->nivel, no->endereco);
+            else if (no->categoria == CAT_FUNCAO)
+                printf(" 1,%d (retorno)", no->endereco);
+            printf("\n");
+        }
+    }
 }
 
 // Libera todos os nós das listas encadeadas da tabela
@@ -315,20 +343,6 @@ void ler_arquivo(const char *nome_arquivo) {
     fclose(arq);
 
     buffer = inicio_buffer;
-}
-
-// Conta quantas linhas o arquivo fonte possui
-int contar_linhas(void) {
-    int linhas = 0;
-    char *p;
-    for (p = inicio_buffer; *p != '\0'; p++) {
-        if (*p == '\n')
-            linhas++;
-    }
-    // a última linha pode não terminar com '\n'
-    if (p != inicio_buffer && *(p - 1) != '\n')
-        linhas++;
-    return linhas;
 }
 
 // Libera a memória do buffer
@@ -1281,8 +1295,9 @@ int main(int argc, char *argv[]) {
     programa();        // símbolo inicial da gramática
     consome(EOS);
 
+    // sem erros imprime a tradução para MEPA e a tabela de simbolos
     imprimir_codigo();
-    printf("%d linhas analisadas, programa sintaticamente correto\n", contar_linhas());
+    imprimir_tabela();
     liberar_buffer();
     liberar_tabela();
     liberar_codigo();
